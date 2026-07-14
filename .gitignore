@@ -1,0 +1,19 @@
+# Credenciais -- NUNCA subir isso pro repositório
+service_account.json
+*.json.key
+.env
+
+# Ambiente Python
+__pycache__/
+*.pyc
+venv/
+env/
+.venv/
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
