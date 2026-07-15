@@ -150,4 +150,4 @@ Detalhes completos, incluindo o resultado de cada parceiro, estão no relatório
 - WOOLDRIDGE, Jeffrey M. *Introductory econometrics: a modern approach*. 5. ed. Mason: South-Western Cengage Learning, 2012. Base para o teste F conjunto e a inferência em regressão múltipla.
 - NEWEY, Whitney K.; WEST, Kenneth D. A Simple, Positive Semi-Definite, Heteroskedasticity and Autocorrelation Consistent Covariance Matrix. *Econometrica*, v. 55, n. 3, p. 703-708, 1987. Base para os erros-padrão HAC, robustos a heterocedasticidade e autocorrelação serial em dado em série temporal diária.
 
-Detalhamento completo da metodologia, incluindo o resultado de cada parceiro e as referências acadêmicas usadas na análise, está no relatório: `Relatorio_Testes_AB_Cashback.docx`.
+Detalhamento completo da metodologia, incluindo o resultado de cada parceiro e as referências acadêmicas usadas na análise, está no relatório: `Relatorio_Testes_AB_Cashback.pdf`.
