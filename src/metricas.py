@@ -3,9 +3,17 @@ Módulo de métricas derivadas para análise de teste A/B de cashback.
 
 Recebe o DataFrame já limpo (saída de limpeza.carregar_dados) e adiciona:
     - ticket_medio   = vendas_totais / compradores
-    - margem         = comissão - cashback
+    - margem         = comissão - cashback   [única métrica usada pelo pipeline
+                        de decisão -- analise.py e decisao.py rodam sobre ela]
     - roi_cashback   = margem / cashback
     - taxa_cashback  = cashback / vendas_totais
+
+`roi_cashback` e `taxa_cashback` são métricas AUXILIARES DE LEITURA: aparecem
+em resumo_por_grupo() para dar contexto (ex: "esse parceiro tem margem maior,
+mas também está gastando proporcionalmente mais em cashback?"), mas não
+entram em nenhum teste estatístico nem influenciam a decisão final em
+decisao.py. Não é código morto -- é intencionalmente descritivo, não
+decisório.
 """
 
 import pandas as pd

@@ -18,11 +18,14 @@ A IA deve entender o pedido, rodar os scripts certos na ordem certa, e devolver 
 
 1. **Identifique o caminho do dataset** mencionado pelo usuário (ex: `dados/dataset_04_parceiroD.csv`). Se a pessoa só mencionar o nome do parceiro ou anexar o arquivo, localize o CSV correspondente em `dados/`.
 
-2. **Rode o pipeline completo com `registro.py`**, que já encadeia limpeza → métricas → análise → decisão → registro na planilha:
+2. **Rode o pipeline completo com `registro.py`**, que já encadeia limpeza → métricas → análise → decisão → registro na planilha (CSV local sempre, e também no Google Sheets se um `--sheet-id` estiver configurado):
 
    ```bash
-   python src/registro.py <caminho_do_dataset> [custo_troca]
+   python src/registro.py <caminho_do_dataset> [custo_troca] [--sheet-id SEU_SHEET_ID]
    ```
+
+   - O CSV local (`planilha_acompanhamento.csv`) é sempre gravado, mesmo sem `--sheet-id` ou sem `service_account.json` configurado.
+   - Se `--sheet-id` for informado mas a credencial (`service_account.json`, na raiz do projeto) não estiver configurada ou a planilha não estiver compartilhada com a service account, o script apenas avisa — não quebra a execução.
 
    - Se o usuário não mencionar um `custo_troca`, rode sem esse argumento (o script avalia só o filtro estatístico e sinaliza que a decisão de negócio depende desse parâmetro).
    - Se o usuário fornecer ou já tiver definido um `custo_troca` para aquele parceiro em conversas anteriores, use o mesmo valor. Não invente um número — se não houver um definido, pergunte ao usuário ou explique como calculá-lo (ver seção "Como calcular custo_troca" abaixo).

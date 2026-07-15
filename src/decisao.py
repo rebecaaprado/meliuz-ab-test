@@ -82,31 +82,46 @@ def tomar_decisao(resultado_analise: dict, custo_troca: float = None) -> dict:
             "filtro_negocio": "não aplicável (caso degenerado)",
         }
 
-    # --- teste F conjunto não significativo: para tudo aqui ---
+    # --- teste F conjunto ausente ou não significativo: para tudo aqui ---
     f_conjunto = resultado_analise["teste_f_conjunto"]
     if not f_conjunto or not f_conjunto["significativo"]:
+        if f_conjunto is None:
+            justificativa = (
+                "Não foi possível calcular o teste F conjunto (nenhum coeficiente de "
+                "grupo disponível -- provavelmente há um único grupo no dataset). "
+                "Sem evidência de diferença entre grupos a avaliar."
+            )
+        else:
+            justificativa = (
+                f"Teste F conjunto não significativo (p={f_conjunto['p_valor']:.4f}). "
+                f"Sem evidência de diferença entre os grupos -- não decompomos em "
+                f"pares (evita inflar falso positivo)."
+            )
         return {
             "decisao": "manter controle",
             "grupo_recomendado": None,
-            "justificativa": (
-                f"Teste F conjunto não significativo (p={f_conjunto['p_valor']:.4f} "
-                f"se disponível). Sem evidência de diferença entre os grupos -- "
-                f"não decompomos em pares (evita inflar falso positivo)."
-            ),
-            "filtro_estatistico": "reprovado no teste F conjunto",
+            "justificativa": justificativa,
+            "filtro_estatistico": "reprovado no teste F conjunto" if f_conjunto else "não aplicável (teste F indisponível)",
             "filtro_negocio": "não avaliado",
         }
 
     pares = resultado_analise["comparacoes_pairwise"]
-    mde = resultado_analise["effect_size_minimo_detectavel"]
-    mde_absoluto = mde["mde_absoluto"] if mde else 0
+    mde_global = resultado_analise["effect_size_minimo_detectavel"]
+    mde_absoluto_fallback = mde_global["mde_absoluto"] if mde_global else 0
 
     pares_reorientados = _pares_favorecidos(pares)
 
-    # FILTRO 1: estatístico (IC não cruza zero + diferença >= MDE)
+    # FILTRO 1: estatístico (IC não cruza zero + diferença >= MDE do próprio par)
+    # Usa 'significativo_ajustado' (Holm-Bonferroni, corrige múltiplas comparações
+    # quando há 3+ grupos) e 'mde_par_absoluto' (calculado a partir do erro-padrão
+    # daquele contraste específico, não uma média global) -- ambos calculados em
+    # analise.comparacoes_pairwise(). O fallback existe só por segurança, caso
+    # algum chamador externo passe pares sem essas chaves.
     for p in pares_reorientados:
+        significativo = p.get("significativo_ajustado", p["significativo"])
+        mde_par = p.get("mde_par_absoluto", mde_absoluto_fallback)
         p["passa_filtro_estatistico"] = (
-            p["significativo"] and p["diferenca_abs"] >= mde_absoluto
+            significativo and p["diferenca_abs"] >= mde_par
         )
 
     # FILTRO 2: negócio (só avaliado se custo_troca foi definido)
@@ -121,14 +136,16 @@ def tomar_decisao(resultado_analise: dict, custo_troca: float = None) -> dict:
             p["passa_filtro_negocio"] = None  # não avaliado
 
     # candidato a "vencedor": grupo que vence TODAS as comparações que participa
+    # (mesma lógica simétrica usada no filtro de negócio: só é vencedor quem é
+    # o favorecido E passa no filtro em TODAS as comparações em que aparece --
+    # nenhuma comparação é descartada da checagem)
     candidatos_vitoriosos = {}
     for g in grupos:
         comparacoes_do_grupo = [p for p in pares_reorientados if g in (p["grupo_a"], p["grupo_b"])]
         venceu_todas_estatistico = all(
-            (p["favorecido"] == g) and p["passa_filtro_estatistico"]
+            p["favorecido"] == g and p["passa_filtro_estatistico"]
             for p in comparacoes_do_grupo
-            if p["passa_filtro_estatistico"] or p["favorecido"] == g
-        ) and all(p["favorecido"] == g or not p["passa_filtro_estatistico"] for p in comparacoes_do_grupo)
+        )
         candidatos_vitoriosos[g] = venceu_todas_estatistico
 
     vencedores_estatisticos = [g for g, venceu in candidatos_vitoriosos.items() if venceu]
@@ -200,7 +217,8 @@ def tomar_decisao(resultado_analise: dict, custo_troca: float = None) -> dict:
 
 if __name__ == "__main__":
     import sys
-    sys.path.insert(0, "src")
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from limpeza import carregar_dados
     from metricas import calcular_metricas
     from analise import analisar

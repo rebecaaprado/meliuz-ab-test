@@ -76,13 +76,36 @@ python src/registro.py dados/dataset_02_parceiroB.csv 1922.82
 python src/registro.py dados/dataset_03_parceiroC.csv
 ```
 
-Isso roda o pipeline completo e grava/atualiza uma linha em `planilha_acompanhamento.csv`, com: nome do teste, parceiro, descrição, período, número de grupos, resumo do resultado estatístico, decisão, grupo recomendado, custo_troca usado e data do registro. Rodar de novo para o mesmo parceiro **atualiza** a linha existente em vez de duplicar.
+Isso roda o pipeline completo e grava/atualiza uma linha em `planilha_acompanhamento.csv`, com: nome do teste, parceiro, descrição, período, número de grupos, resumo do resultado estatístico, decisão, grupo recomendado e custo_troca usado. Rodar de novo para o mesmo parceiro **atualiza** a linha existente em vez de duplicar.
 
 Parâmetro opcional de destino da planilha:
 
 ```bash
 python src/registro.py dados/dataset_01_parceiroA.csv 3041.68 --planilha caminho/custom.csv
 ```
+
+### 4. Registrar também no Google Sheets (diferencial)
+
+Além do CSV local (sempre gravado, sem depender de credencial ou internet), o `registro.py` também grava/atualiza a mesma linha direto numa planilha do Google Sheets, se você informar o `--sheet-id`:
+
+```bash
+python src/registro.py dados/dataset_01_parceiroA.csv 3041.68 --sheet-id SEU_SHEET_ID
+```
+
+**Configuração necessária (uma vez só):**
+
+1. Crie um projeto no [Google Cloud Console](https://console.cloud.google.com/) e ative a API do Google Sheets.
+2. Crie uma **service account** e gere uma chave JSON (aba "Keys" → "Add key" → JSON).
+3. Salve o arquivo baixado como `service_account.json` na **raiz do projeto** (nunca dentro de `src/`, e nunca commitado — já está no `.gitignore`).
+4. Crie uma planilha nova no Google Sheets, copie o ID da URL (`docs.google.com/spreadsheets/d/ESSE_ID/edit`), e compartilhe a planilha com o e-mail da service account (campo `client_email` no JSON) como **Editor**.
+5. Rode o comando acima com o `--sheet-id`. Se a credencial ou o ID estiverem errados, o script **avisa mas não quebra** — o CSV local já foi salvo de qualquer forma.
+
+Também dá pra testar a conexão isoladamente:
+```bash
+python src/sheets.py SEU_SHEET_ID
+```
+
+Antes de entregar/compartilhar a planilha, lembre-se de ajustar o "Acesso geral" para **"Qualquer pessoa com o link" → Leitor** (mantendo a service account como Editor), para que quem for avaliar consiga abrir o link sem pedir permissão.
 
 ## Metodologia (resumo)
 

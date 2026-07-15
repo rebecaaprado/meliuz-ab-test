@@ -68,11 +68,56 @@ def teste_f_conjunto(resultado, grupos_ordenados):
     }
 
 
-def comparacoes_pairwise(resultado, grupos_ordenados):
+def _mde_a_partir_do_erro_padrao(erro_padrao: float, alpha=0.05, power=0.8) -> float:
+    """MDE ≈ (z_alpha/2 + z_power) * erro-padrão do contraste específico."""
+    from scipy.stats import norm
+
+    z_alpha = norm.ppf(1 - alpha / 2)
+    z_power = norm.ppf(power)
+    return (z_alpha + z_power) * erro_padrao
+
+
+def _correcao_holm_bonferroni(pares: list, alpha=0.05) -> list:
+    """
+    Aplica a correção de Holm-Bonferroni aos p-valores dos pares, adicionando
+    'p_valor_ajustado' e 'significativo_ajustado' a cada dict.
+
+    Por que Holm e não só "parar no F conjunto": o F conjunto protege contra
+    falso positivo na pergunta "existe alguma diferença?", mas com 3+ grupos
+    (logo, 3+ comparações par-a-par) ainda há inflação de falso positivo ao
+    testar cada par individualmente com o mesmo alpha=0.05. Holm corrige isso
+    sem ser tão conservador quanto Bonferroni simples (ordena os p-valores e
+    aplica um limiar crescente, em vez de dividir alpha por m em todos eles).
+    """
+    m = len(pares)
+    if m == 0:
+        return pares
+    ordem = sorted(range(m), key=lambda i: pares[i]["p_valor"])
+    maior_ajustado_ate_agora = 0.0
+    p_ajustados = [None] * m
+    for rank, idx in enumerate(ordem):
+        ajustado = min(1.0, (m - rank) * pares[idx]["p_valor"])
+        maior_ajustado_ate_agora = max(maior_ajustado_ate_agora, ajustado)
+        p_ajustados[idx] = maior_ajustado_ate_agora
+    for i, p in enumerate(pares):
+        p["p_valor_ajustado"] = p_ajustados[i]
+        p["significativo_ajustado"] = p_ajustados[i] < alpha
+    return pares
+
+
+def comparacoes_pairwise(resultado, grupos_ordenados, alpha=0.05, power=0.8):
     """
     Compara cada par de grupos (incluindo pares que não envolvem a referência,
     via contraste linear). Retorna lista de dicts com diferença estimada, IC95%,
-    e p-valor — usando a MESMA matriz de covariância HAC do modelo.
+    p-valor (bruto e ajustado por Holm-Bonferroni) e MDE — usando a MESMA
+    matriz de covariância HAC do modelo.
+
+    O MDE é calculado por par (a partir do erro-padrão daquele contraste
+    específico via teste.sd), não como uma média global aproximada -- o
+    erro-padrão de uma diferença entre dois grupos não-referência depende da
+    covariância entre eles (Var(A-B) = Var(A) + Var(B) - 2*Cov(A,B)), que
+    varia por par e não é capturada por uma média dos erros-padrão
+    individuais dos coeficientes.
     """
     ref = grupos_ordenados[0]
     pares = []
@@ -90,6 +135,7 @@ def comparacoes_pairwise(resultado, grupos_ordenados):
                 contraste = f"{nome2} - {nome1} = 0"
 
             teste = resultado.t_test(contraste)
+            erro_padrao_par = float(np.ravel(teste.sd)[0])
             pares.append({
                 "grupo_a": g1,
                 "grupo_b": g2,
@@ -98,16 +144,23 @@ def comparacoes_pairwise(resultado, grupos_ordenados):
                 "ic95_superior": float(teste.conf_int()[0][1]),
                 "p_valor": float(teste.pvalue),
                 "significativo": float(teste.pvalue) < 0.05,
+                "erro_padrao_diferenca": erro_padrao_par,
+                "mde_par_absoluto": _mde_a_partir_do_erro_padrao(erro_padrao_par, alpha, power),
             })
-    return pares
+    return _correcao_holm_bonferroni(pares, alpha)
 
 
 def effect_size_minimo_detectavel(resultado, metrica_media: float, alpha=0.05, power=0.8):
     """
-    Effect size mínimo detectável (MDE) aproximado, dado o erro-padrão HAC do
+    Effect size mínimo detectável (MDE) médio, dado o erro-padrão HAC do
     modelo e o N disponível. Ajuda a distinguir "sem diferença real" de
     "teste sem poder estatístico suficiente pra detectar diferença que existe".
-    Aproximação: MDE ≈ (z_alpha/2 + z_power) * erro_padrao_medio_dos_coefs_de_grupo
+
+    Esse valor é uma leitura AGREGADA (média dos erros-padrão dos coeficientes
+    de grupo) usada só para contexto/relatório -- a decisão em decisao.py usa
+    o MDE por par ('mde_par_absoluto', calculado em comparacoes_pairwise a
+    partir do erro-padrão de cada contraste específico), que é mais preciso
+    para pares que não envolvem o grupo de referência.
     """
     from scipy.stats import norm
 
@@ -129,12 +182,19 @@ def effect_size_minimo_detectavel(resultado, metrica_media: float, alpha=0.05, p
 
 def grupos_com_variancia_zero(df: pd.DataFrame, metrica: str) -> list:
     """
-    Detecta grupos cuja métrica não varia (std=0 ou NaN por constância).
+    Detecta grupos cuja métrica é constante (std=0, com >=2 observações).
     Regressão HAC fica degenerada nesses casos (covariância sem rank completo)
     porque não há erro a estimar -- o resultado é determinístico, não estatístico.
+
+    Grupos com menos de 2 observações também geram std=NaN, mas por falta de
+    dado, não por constância real -- esses NÃO entram aqui como "degenerados"
+    (o pipeline já sinaliza amostra insuficiente separadamente, em limpeza.py).
+    Tratá-los como degenerado faria o pipeline "decidir" com base num único
+    ponto, como se fosse uma diferença certa.
     """
-    stats = df.groupby("Grupos de usuários")[metrica].std()
-    return stats[(stats == 0) | (stats.isna())].index.tolist()
+    agg = df.groupby("Grupos de usuários")[metrica].agg(["std", "count"])
+    degenerados = agg[(agg["count"] >= 2) & (agg["std"] == 0)]
+    return degenerados.index.tolist()
 
 
 def analisar(df: pd.DataFrame, metrica: str = "margem"):
@@ -143,10 +203,16 @@ def analisar(df: pd.DataFrame, metrica: str = "margem"):
     Retorna um dict com tudo pronto para a camada de decisão (decisao.py).
 
     Nota: a "relevância prática" de uma diferença é decidida pelo MDE (effect
-    size mínimo detectável), não por um piso de % arbitrário -- por isso não
-    há parâmetro de piso de relevância aqui. `diferenca_percentual` é mantida
-    só como leitura auxiliar (dá contexto de magnitude ao lado do R$), sem
-    influenciar a decisão em decisao.py.
+    size mínimo detectável) calculado por par, não por um piso de % arbitrário
+    -- por isso não há parâmetro de piso de relevância aqui. `diferenca_percentual`
+    é mantida só como leitura auxiliar (dá contexto de magnitude ao lado do R$),
+    sem influenciar a decisão em decisao.py.
+
+    A significância usada pela decisão (decisao.py) é a AJUSTADA por
+    Holm-Bonferroni ('significativo_ajustado' em cada par), não a bruta --
+    com 3+ grupos há mais de uma comparação par-a-par, e usar alpha=0.05 sem
+    correção em cada uma infla o risco de falso positivo mesmo já filtrando
+    pelo F conjunto antes.
     """
     grupos_degenerados = grupos_com_variancia_zero(df, metrica)
     if grupos_degenerados:
@@ -220,12 +286,14 @@ if __name__ == "__main__":
             print(
                 f"  {p['grupo_a']} vs {p['grupo_b']}: "
                 f"dif=R$ {p['diferenca_estimada']:.2f} ({p['diferenca_percentual']:.1f}%) "
-                f"p={p['p_valor']:.4f} [{'sig' if p['significativo'] else 'ns'}]"
+                f"p={p['p_valor']:.4f} p_ajustado(Holm)={p['p_valor_ajustado']:.4f} "
+                f"MDE_par=R$ {p['mde_par_absoluto']:.2f} "
+                f"[{'sig' if p['significativo_ajustado'] else 'ns'}]"
             )
     else:
         print("\nSem decomposição pairwise (teste F não significativo).")
 
     mde = analise["effect_size_minimo_detectavel"]
     if mde:
-        print(f"\nEffect size mínimo detectável: R$ {mde['mde_absoluto']:.2f} "
-              f"({mde['mde_percentual']:.1f}% da média)")
+        print(f"\nEffect size mínimo detectável (média, leitura agregada): R$ {mde['mde_absoluto']:.2f} "
+              f"({mde['mde_percentual']:.1f}% da média) -- a decisão usa o MDE por par.")

@@ -11,7 +11,6 @@ Responsável por:
 import pandas as pd
 import numpy as np
 import re
-import warnings
 
 
 def _parse_valor_brl(valor: str) -> float:

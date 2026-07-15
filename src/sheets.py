@@ -31,7 +31,13 @@ COLUNAS = [
 ]
 
 
-def _abrir_planilha(caminho_credencial: str, sheet_id: str):
+def _abrir_planilha(caminho_credencial: str, sheet_id: str, aba: str = None):
+    """
+    aba: nome da worksheet (aba) dentro da planilha. Se None (default), usa a
+    primeira aba por posição (.sheet1) -- mesmo comportamento de antes. Passar
+    um nome explícito evita quebrar silenciosamente se a planilha ganhar mais
+    de uma aba ou a ordem delas mudar.
+    """
     if not os.path.exists(caminho_credencial):
         raise FileNotFoundError(
             f"Credencial não encontrada em '{caminho_credencial}'. "
@@ -40,7 +46,10 @@ def _abrir_planilha(caminho_credencial: str, sheet_id: str):
         )
     creds = Credentials.from_service_account_file(caminho_credencial, scopes=SCOPES)
     cliente = gspread.authorize(creds)
-    return cliente.open_by_key(sheet_id).sheet1
+    planilha = cliente.open_by_key(sheet_id)
+    if aba:
+        return planilha.worksheet(aba)
+    return planilha.sheet1
 
 
 def _garantir_cabecalho(planilha):
@@ -49,7 +58,7 @@ def _garantir_cabecalho(planilha):
         planilha.update(range_name="A1", values=[COLUNAS])
 
 
-def registrar_no_sheets(linha: dict, sheet_id: str, caminho_credencial: str = "service_account.json") -> None:
+def registrar_no_sheets(linha: dict, sheet_id: str, caminho_credencial: str = "service_account.json", aba: str = None) -> None:
     """
     Grava/atualiza a linha do parceiro na planilha do Google Sheets.
     `linha` é o mesmo dict que registro.py já monta para o CSV local --
@@ -57,8 +66,11 @@ def registrar_no_sheets(linha: dict, sheet_id: str, caminho_credencial: str = "s
 
     Se já existir uma linha para o mesmo parceiro (coluna B), ela é
     sobrescrita em vez de duplicada -- mesmo comportamento do CSV.
+
+    `aba`: nome da worksheet a usar (ver _abrir_planilha). Default None usa a
+    primeira aba por posição.
     """
-    planilha = _abrir_planilha(caminho_credencial, sheet_id)
+    planilha = _abrir_planilha(caminho_credencial, sheet_id, aba)
     _garantir_cabecalho(planilha)
 
     valores = [str(linha.get(c, "")) for c in COLUNAS]

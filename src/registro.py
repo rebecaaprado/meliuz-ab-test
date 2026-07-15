@@ -80,14 +80,19 @@ def _resumo_resultado(analise: dict, df, metrica: str = "margem") -> str:
 
 
 def _ler_planilha(caminho: str) -> list:
+    # utf-8-sig lê tanto arquivos com BOM (gravados por este script ou pelo
+    # Excel) quanto UTF-8 puro sem BOM, sem duplicar acentos nem deixar um
+    # caractere invisível colado no nome da primeira coluna.
     if not os.path.exists(caminho):
         return []
-    with open(caminho, newline="", encoding="utf-8") as f:
+    with open(caminho, newline="", encoding="utf-8-sig") as f:
         return list(csv.DictReader(f, delimiter=";"))
 
 
 def _escrever_planilha(caminho: str, linhas: list):
-    with open(caminho, "w", newline="", encoding="utf-8") as f:
+    # utf-8-sig (com BOM) -- sem isso, o Excel no Windows costuma abrir o CSV
+    # com os acentos quebrados quando o arquivo é aberto por duplo clique.
+    with open(caminho, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=COLUNAS, delimiter=";")
         writer.writeheader()
         for linha in linhas:
@@ -100,6 +105,7 @@ def registrar(
     caminho_planilha: str = None,
     sheet_id: str = None,
     caminho_credencial: str = "service_account.json",
+    aba_sheets: str = None,
 ) -> dict:
     if caminho_planilha is None:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -146,7 +152,7 @@ def registrar(
     if sheet_id:
         try:
             from sheets import registrar_no_sheets
-            registrar_no_sheets(linha, sheet_id, caminho_credencial)
+            registrar_no_sheets(linha, sheet_id, caminho_credencial, aba=aba_sheets)
             print(f"  Google Sheets atualizado (sheet_id={sheet_id}).")
         except Exception as e:
             print(f"  Aviso: não consegui atualizar o Google Sheets ({e}). "
@@ -162,6 +168,7 @@ if __name__ == "__main__":
     parser.add_argument("--planilha", default=None, help="Caminho da planilha CSV de acompanhamento (default: planilha_acompanhamento.csv na raiz do projeto)")
     parser.add_argument("--sheet-id", default=None, help="ID da planilha do Google Sheets (também pode ser definido via variável de ambiente MELIUZ_SHEET_ID)")
     parser.add_argument("--credencial", default="service_account.json", help="Caminho do JSON da service account (default: service_account.json na raiz do projeto)")
+    parser.add_argument("--aba", default=None, help="Nome da aba (worksheet) do Google Sheets a usar (default: primeira aba)")
     args = parser.parse_args()
 
     registrar(
@@ -170,4 +177,5 @@ if __name__ == "__main__":
         caminho_planilha=args.planilha,
         sheet_id=args.sheet_id,
         caminho_credencial=args.credencial,
+        aba_sheets=args.aba,
     )
