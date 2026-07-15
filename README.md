@@ -1,8 +1,8 @@
-# Análise de Testes A/B — Cashback (Méliuz)
+# Análise de Testes A/B de Cashback (Méliuz)
 
 Solução reutilizável para analisar testes A/B de variação de % de cashback e decidir, de forma consistente e reprodutível, qual variante escalar para 100% do tráfego.
 
-Roda em qualquer um dos datasets fornecidos (Parceiro A, B ou C) **sem alterar nenhuma linha de código** — só trocando o caminho do arquivo passado como argumento.
+Roda em qualquer um dos datasets fornecidos (Parceiro A, B ou C) **sem alterar nenhuma linha de código**, só trocando o caminho do arquivo passado como argumento.
 
 ## Pergunta que a solução responde
 
@@ -96,9 +96,9 @@ python src/registro.py dados/dataset_01_parceiroA.csv 3041.68 --sheet-id SEU_SHE
 
 1. Crie um projeto no [Google Cloud Console](https://console.cloud.google.com/) e ative a API do Google Sheets.
 2. Crie uma **service account** e gere uma chave JSON (aba "Keys" → "Add key" → JSON).
-3. Salve o arquivo baixado como `service_account.json` na **raiz do projeto** (nunca dentro de `src/`, e nunca commitado — já está no `.gitignore`).
+3. Salve o arquivo baixado como `service_account.json` na **raiz do projeto** (nunca dentro de `src/`, e nunca commitado: já está no `.gitignore`).
 4. Crie uma planilha nova no Google Sheets, copie o ID da URL (`docs.google.com/spreadsheets/d/ESSE_ID/edit`), e compartilhe a planilha com o e-mail da service account (campo `client_email` no JSON) como **Editor**.
-5. Rode o comando acima com o `--sheet-id`. Se a credencial ou o ID estiverem errados, o script **avisa mas não quebra** — o CSV local já foi salvo de qualquer forma.
+5. Rode o comando acima com o `--sheet-id`. Se a credencial ou o ID estiverem errados, o script **avisa mas não quebra**: o CSV local já foi salvo de qualquer forma.
 
 Também dá pra testar a conexão isoladamente:
 ```bash
@@ -111,22 +111,22 @@ Antes de entregar/compartilhar a planilha, lembre-se de ajustar o "Acesso geral"
 
 A decisão de escalar uma variante passa por dois filtros aplicados em sequência a cada comparação par-a-par entre grupos:
 
-1. **Filtro estatístico** — a diferença é confiável? `IC95% não cruza zero` **e** `|diferença| ≥ MDE` (effect size mínimo detectável, calculado a partir da amostra). Abaixo do MDE, o teste não tem poder estatístico suficiente para confiar no resultado, independente do p-valor.
+1. **Filtro estatístico**: a diferença é confiável? `IC95% não cruza zero` **e** `|diferença| ≥ MDE` (effect size mínimo detectável, calculado a partir da amostra). Abaixo do MDE, o teste não tem poder estatístico suficiente para confiar no resultado, independente do p-valor.
 
-2. **Filtro de negócio** — mesmo no cenário mais conservador, ainda compensa agir? `limite inferior do IC95% > custo_troca`.
+2. **Filtro de negócio**: mesmo no cenário mais conservador, ainda compensa agir? `limite inferior do IC95% > custo_troca`.
 
-`custo_troca` (R$/dia) é o ganho mínimo necessário para justificar o esforço/risco de escalar uma variante. Não é derivado dos dados — é uma estimativa de negócio, calculada aqui como:
+`custo_troca` (R$/dia) é o ganho mínimo necessário para justificar o esforço/risco de escalar uma variante. Não é derivado dos dados: é uma estimativa de negócio, calculada aqui como:
 
 ```
 custo_troca = max(custo_operacional_amortizado, 1.5 × desvio_padrão_pooled_da_margem)
 ```
 
 - **Custo operacional amortizado**: estimativa ilustrativa de horas de trabalho para reconfigurar a variante ativa, convertida em R$/dia. Usamos 6h a ~R$15,15/hora (referência: salário médio de estágio em Growth/IA no Brasil, ~R$2.000/mês), amortizado em 30 dias.
-- **1,5× desvio-padrão pooled**: piso de "ruído natural do negócio" — como os datasets não identificam qual grupo era o controle, usamos o desvio-padrão ponderado (pooled) entre todos os grupos do parceiro, em vez de supor qual grupo era o baseline.
+- **1,5× desvio-padrão pooled**: piso de "ruído natural do negócio": como os datasets não identificam qual grupo era o controle, usamos o desvio-padrão ponderado (pooled) entre todos os grupos do parceiro, em vez de supor qual grupo era o baseline.
 
 O uso do **máximo** (em vez de soma ou média) garante que a mudança precisa, ao mesmo tempo, cobrir o custo de implementação **e** ser grande o suficiente para não se perder na variação natural do negócio.
 
-Um teste de sensibilidade (variando o custo operacional de R$3 a R$21/dia) mostrou que o desvio-padrão domina o cálculo em ambos os parceiros com incerteza estatística — ou seja, a decisão final é pouco sensível à premissa mais arbitrária (custo operacional) e depende principalmente da variação real do negócio.
+Um teste de sensibilidade (variando o custo operacional de R$3 a R$21/dia) mostrou que o desvio-padrão domina o cálculo em ambos os parceiros com incerteza estatística, ou seja, a decisão final é pouco sensível à premissa mais arbitrária (custo operacional) e depende principalmente da variação real do negócio.
 
 Detalhes completos, incluindo o resultado de cada parceiro, estão no relatório: `Relatorio_Testes_AB_Cashback.docx`.
 
@@ -134,13 +134,20 @@ Detalhes completos, incluindo o resultado de cada parceiro, estão no relatório
 
 | Parceiro | custo_troca (R$/dia) | Decisão | Grupo recomendado |
 |---|---|---|---|
-| A | 3.041,68 | inconclusivo | — |
+| A | 3.041,68 | inconclusivo | - |
 | B | 1.922,82 | escalar | Grupo 1 |
 | C | não se aplica (caso determinístico) | escalar | Grupo 1 |
 
 ## Limitações conhecidas
 
-- O `custo_troca` usado é uma estimativa ilustrativa; recomenda-se substituí-lo por um número validado com o time de growth/engenharia antes de uso definitivo em produção.
+- O `custo_troca` usado é uma estimativa ilustrativa; em um cenário real de produção, precisaria ser validado com dados de negócio (custo operacional real, apetite de risco).
 - Parceiro A requer re-teste ou aumento de amostra para permitir uma decisão conclusiva.
-- Parceiro C: o Grupo 2 tem cashback idêntico à comissão em 100% das linhas (margem zero). Vale confirmar com o time se isso é uma regra de negócio intencional (repasse total) ou um erro de exportação de dados antes de tratar a decisão como definitiva.
-- A limpeza de dados identifica choques comuns (outliers simultâneos em múltiplos grupos na mesma data) em datas específicas de cada parceiro — recomenda-se tratá-los via variável dummy em uma regressão futura, não excluí-los.
+- Parceiro C: a origem do dado do Grupo 2 (margem zero) não pode ser confirmada com os dados disponíveis; pode ser regra de negócio (repasse total) ou erro de exportação.
+- Parceiros A e B têm datas com choque comum (outlier simultâneo em múltiplos grupos), tratado via variável dummy na regressão.
+
+## Referências metodológicas
+
+- WOOLDRIDGE, Jeffrey M. *Introductory econometrics: a modern approach*. 5. ed. Mason: South-Western Cengage Learning, 2012. Base para o teste F conjunto e a inferência em regressão múltipla.
+- NEWEY, Whitney K.; WEST, Kenneth D. A Simple, Positive Semi-Definite, Heteroskedasticity and Autocorrelation Consistent Covariance Matrix. *Econometrica*, v. 55, n. 3, p. 703-708, 1987. Base para os erros-padrão HAC, robustos a heterocedasticidade e autocorrelação serial em dado em série temporal diária.
+
+Detalhamento completo da metodologia, incluindo o resultado de cada parceiro e as referências acadêmicas usadas na análise, está no relatório: `Relatorio_Testes_AB_Cashback.docx`.

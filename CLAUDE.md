@@ -1,6 +1,6 @@
-# CLAUDE.md — Análise de Testes A/B de Cashback (Méliuz)
+# CLAUDE.md: Análise de Testes A/B de Cashback (Méliuz)
 
-Este arquivo orienta uma ferramenta de IA (Claude Code, Cursor, GPT custom, etc.) sobre como analisar um teste A/B de cashback neste projeto, a partir de um pedido em linguagem natural do usuário — sem que a pessoa precise saber Python ou conhecer os scripts internos.
+Este arquivo orienta uma ferramenta de IA (Claude Code, Cursor, GPT custom, etc.) sobre como analisar um teste A/B de cashback neste projeto, a partir de um pedido em linguagem natural do usuário, sem que a pessoa precise saber Python ou conhecer os scripts internos.
 
 ## Cenário de uso
 
@@ -12,7 +12,7 @@ Uma pessoa do time de Growth (sem background técnico) abre esta pasta numa ferr
 
 > "Registra esse resultado na planilha de acompanhamento"
 
-A IA deve entender o pedido, rodar os scripts certos na ordem certa, e devolver a resposta em linguagem natural — não o output cru do terminal.
+A IA deve entender o pedido, rodar os scripts certos na ordem certa, e devolver a resposta em linguagem natural, não o output cru do terminal.
 
 ## O que fazer quando alguém pede para analisar um teste novo
 
@@ -21,23 +21,24 @@ A IA deve entender o pedido, rodar os scripts certos na ordem certa, e devolver 
 2. **Rode o pipeline completo com `registro.py`**, que já encadeia limpeza → métricas → análise → decisão → registro na planilha (CSV local sempre, e também no Google Sheets se um `--sheet-id` estiver configurado):
 
    ```bash
-   python src/registro.py <caminho_do_dataset> [custo_troca] [--sheet-id SEU_SHEET_ID]
+   python src/registro.py <caminho_do_dataset> [custo_troca] [--sheet-id SEU_SHEET_ID] [--aba NOME_DA_ABA]
    ```
 
    - O CSV local (`planilha_acompanhamento.csv`) é sempre gravado, mesmo sem `--sheet-id` ou sem `service_account.json` configurado.
-   - Se `--sheet-id` for informado mas a credencial (`service_account.json`, na raiz do projeto) não estiver configurada ou a planilha não estiver compartilhada com a service account, o script apenas avisa — não quebra a execução.
+   - Se `--sheet-id` for informado mas a credencial (`service_account.json`, na raiz do projeto) não estiver configurada ou a planilha não estiver compartilhada com a service account, o script apenas avisa, não quebra a execução.
+   - `--aba` é opcional e só necessário se a planilha do Google Sheets tiver mais de uma aba; sem essa flag, o script usa a primeira aba por posição.
 
    - Se o usuário não mencionar um `custo_troca`, rode sem esse argumento (o script avalia só o filtro estatístico e sinaliza que a decisão de negócio depende desse parâmetro).
-   - Se o usuário fornecer ou já tiver definido um `custo_troca` para aquele parceiro em conversas anteriores, use o mesmo valor. Não invente um número — se não houver um definido, pergunte ao usuário ou explique como calculá-lo (ver seção "Como calcular custo_troca" abaixo).
+   - Se o usuário fornecer ou já tiver definido um `custo_troca` para aquele parceiro em conversas anteriores, use o mesmo valor. Não invente um número: se não houver um definido, pergunte ao usuário ou explique como calculá-lo (ver seção "Como calcular custo_troca" abaixo).
 
 3. **Leia o output do script e os avisos de `limpeza.py`.** Preste atenção especial a:
    - Avisos de outliers e "choques comuns" (indício de evento externo afetando múltiplos grupos na mesma data).
-   - Casos degenerados (variância zero em algum grupo) — a decisão nesses casos é determinística, não estatística.
-   - Decisão "inconclusivo" — significa que nenhum grupo superou todos os demais com confiança suficiente; não force uma recomendação onde os dados não sustentam uma.
+   - Casos degenerados (variância zero em algum grupo): a decisão nesses casos é determinística, não estatística.
+   - Decisão "inconclusivo": significa que nenhum grupo superou todos os demais com confiança suficiente; não force uma recomendação onde os dados não sustentam uma.
 
 4. **Traduza o resultado para linguagem natural**, no formato:
    - Qual foi a decisão (escalar / manter controle / inconclusivo) e qual grupo, se houver.
-   - Por que — cite a lógica dos dois filtros (estatístico + negócio), não apenas o resultado final.
+   - Por quê: cite a lógica dos dois filtros (estatístico + negócio), não apenas o resultado final.
    - Qualquer nota de atenção relevante (ex: outlier simultâneo, variância zero, amostra pequena).
 
 5. **Confirme que a planilha (`planilha_acompanhamento.csv`) foi atualizada** e informe isso ao usuário. Se rodar de novo para o mesmo parceiro, a linha antiga é substituída, não duplicada.
@@ -46,22 +47,22 @@ A IA deve entender o pedido, rodar os scripts certos na ordem certa, e devolver 
 
 ## Como calcular custo_troca (quando não fornecido)
 
-`custo_troca` é o ganho mínimo de margem (R$/dia) para justificar escalar uma variante. Não é derivado dos dados — é uma estimativa de negócio. A fórmula usada neste projeto:
+`custo_troca` é o ganho mínimo de margem (R$/dia) para justificar escalar uma variante. Não é derivado dos dados: é uma estimativa de negócio. A fórmula usada neste projeto:
 
 ```
 custo_troca = max(custo_operacional_amortizado, 1.5 × desvio_padrão_pooled_da_margem_do_parceiro)
 ```
 
-- `custo_operacional_amortizado` = (horas de trabalho estimadas × taxa/hora) ÷ dias de amortização. Sem uma estimativa melhor, use como referência ilustrativa: 6h, ~R$15/hora, amortizado em 30 dias (~R$3/dia) — mas deixe claro ao usuário que isso é uma suposição, não um dado real do negócio.
+- `custo_operacional_amortizado` = (horas de trabalho estimadas × taxa/hora) ÷ dias de amortização. Sem uma estimativa melhor, use como referência ilustrativa: 6h, ~R$15/hora, amortizado em 30 dias (~R$3/dia), mas deixe claro ao usuário que isso é uma suposição, não um dado real do negócio.
 - `desvio_padrão_pooled` = desvio-padrão da margem diária, ponderado entre todos os grupos do parceiro (não apenas um grupo "controle", já que os datasets não identificam qual grupo é o baseline).
 
-Nunca decida esse número sozinho sem avisar o usuário que é uma suposição — pergunte se ele já tem um valor definido, ou ofereça calcular com a fórmula acima deixando a arbitrariedade explícita.
+Nunca decida esse número sozinho sem avisar o usuário que é uma suposição: pergunte se ele já tem um valor definido, ou ofereça calcular com a fórmula acima deixando a arbitrariedade explícita.
 
 ## Regras gerais
 
 - **Nunca altere o código dos scripts em `src/` para acomodar um dataset específico.** A solução deve funcionar em qualquer dataset com o mesmo schema, apenas trocando o argumento do caminho.
 - **Nunca invente números de negócio** (custo_troca, piso de relevância prática, etc.) sem deixar explícito que é uma suposição e sem oferecer a lógica por trás.
-- **Não esconda incerteza estatística.** Se o teste F conjunto não for significativo ou a decisão for "inconclusivo", comunique isso claramente — não force uma recomendação de "escalar" só porque um grupo teve média nominalmente mais alta.
+- **Não esconda incerteza estatística.** Se o teste F conjunto não for significativo ou a decisão for "inconclusivo", comunique isso claramente, não force uma recomendação de "escalar" só porque um grupo teve média nominalmente mais alta.
 - **Sinalize dados suspeitos** (outliers, choques comuns, variância zero) ao usuário, mesmo que a decisão final não dependa diretamente deles.
 
 ## Schema esperado dos datasets
